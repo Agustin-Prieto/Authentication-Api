@@ -1,4 +1,5 @@
 ﻿using AuthenticationServices.Models;
+using AuthenticationServices.Models.DTOs;
 using AuthenticationServices.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;

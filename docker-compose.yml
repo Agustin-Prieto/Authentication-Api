@@ -1,22 +1,8 @@
 version: '3.4'
 
 services:
-  authenticationapi:
-    container_name: authapi
-    build:
-      context: .
-      dockerfile: /Dockerfile
-    ports:
-      - "3000:3000"
-    depends_on: 
-      - db    
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-    networks:
-      - AuthApi
-
-  db: 
-    container_name: db
+  mssql-server: 
+    container_name: mssql-server
     image: mcr.microsoft.com/mssql/server:2019-latest
     ports: 
       - "1433:1433"
@@ -26,8 +12,25 @@ services:
     networks:
       - AuthApi
 
-
-
+  authenticationapi:
+    container_name: authapi
+    build:
+      context: .
+      dockerfile: /Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on: 
+      - mssql-server    
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DatabaseServer: "mssql-server"
+      DatabasePort: "1433"
+      DatabaseUser: "SA"
+      DatabasePassword: "adminA1!"
+      DatabaseName: "AuthApiDB"
+    networks:
+      - AuthApi
+      
 networks:
   AuthApi:
     driver: bridge

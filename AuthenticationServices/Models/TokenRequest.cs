@@ -2,10 +2,10 @@
 
 namespace AuthenticationServices.Models;
 
-public class LoginRequestDto
+public class TokenRequest
 {
     [Required]
-    public string Email { get; set; }
+    public string Token { get; set; }
     [Required]
-    public string Password { get; set; }
+    public string RefreshToken { get; set; }
 }

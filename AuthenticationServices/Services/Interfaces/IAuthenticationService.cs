@@ -1,4 +1,5 @@
 ﻿using AuthenticationServices.Models;
+using AuthenticationServices.Models.DTOs;
 using System;
 using System.Collections.Generic;
 using System.Linq;

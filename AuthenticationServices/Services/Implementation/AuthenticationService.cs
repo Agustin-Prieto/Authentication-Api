@@ -1,4 +1,6 @@
-﻿using AuthenticationServices.Models;
+﻿using AuthenticationData.Data;
+using AuthenticationServices.Models;
+using AuthenticationServices.Models.DTOs;
 using AuthenticationServices.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -13,17 +15,19 @@ public class AuthenticationService : IAuthenticationService
 {
     private readonly UserManager<IdentityUser> _userManager;
     private readonly IConfiguration _configuration;
+    private readonly AppDbContext _context;
+    private readonly TokenValidationParameters _tokenValidationParameters;
 
-    public AuthenticationService(UserManager<IdentityUser> userManager, IConfiguration configuration)
+    public AuthenticationService(UserManager<IdentityUser> userManager, IConfiguration configuration, AppDbContext context, TokenValidationParameters tokenValidationParameters)
     {
         _userManager = userManager;
         _configuration = configuration;
+        _context = context;
+        _tokenValidationParameters = tokenValidationParameters;
     }
-
+    
     public async Task<AuthResult> Register(RegisterRequestDto request)
     {
-        var connectionStr = _configuration.GetConnectionString("DefaultConnection");
-        Console.WriteLine(connectionStr);
         var existingUser = await _userManager.FindByEmailAsync(request.Email);
         if (existingUser != null)
         {
@@ -102,39 +106,63 @@ public class AuthenticationService : IAuthenticationService
             };
         }
 
-        var token = GenerateJwtToken(existingUser);
+        var JwtToken = await GenerateJwtToken(existingUser);
+
+        return JwtToken;
+    }
+
+    private async Task<AuthResult> GenerateJwtToken(IdentityUser user)
+    {
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.UTF8.GetBytes(_configuration.GetSection("JwtConfig:Secret").Value);
+
+        var tokenDescriptor = new SecurityTokenDescriptor()
+        {
+            Subject = new ClaimsIdentity(new Claim[]
+            {
+                new Claim(type:"Id", value:user.Id),
+                new Claim(type:JwtRegisteredClaimNames.Sub, value:user.Email),
+                new Claim(type:JwtRegisteredClaimNames.Email, value:user.Email),
+                new Claim(type:JwtRegisteredClaimNames.Jti, value:Guid.NewGuid().ToString()),
+                new Claim(type:JwtRegisteredClaimNames.Iat, value:DateTime.Now.ToUniversalTime().ToString())
+            }),
+
+            Expires = DateTime.UtcNow.Add(TimeSpan.Parse(_configuration.GetSection("JwtConfig:ExpiryInMinutes").Value)),
+
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
+        };
+        
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var encodedToken = tokenHandler.WriteToken(token);
+
+        var refreshToken = new RefreshToken()
+        {
+            JwtId = user.Id,
+            Token = RandomStringGen(23),
+            UserId = user.Id,
+            AddedDate = DateTime.UtcNow,
+            ExpiryDates = DateTime.UtcNow.AddMonths(6),
+            IsRevoke = false,
+            IsUsed = false,
+        };
+
+        await _context.RefreshTokens.AddAsync(refreshToken);
+        await _context.SaveChangesAsync();
 
         return new AuthResult()
         {
             Result = true,
-            Token = token
+            Token = encodedToken,
+            RefreshToken = refreshToken.Token
         };
     }
 
-    private string GenerateJwtToken(IdentityUser user)
+    private string RandomStringGen(int length)
     {
-        var key = Encoding.UTF8.GetBytes(_configuration.GetSection("JwtConfig:Secret").Value);
-        var credentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256);
+        var random = new Random();
+        var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-        var claims = new List<Claim>
-        {
-            new Claim(type:"Id", value:user.Id),
-            new Claim(type:JwtRegisteredClaimNames.Sub, value:user.Email),
-            new Claim(type:JwtRegisteredClaimNames.Email, value:user.Email),
-            new Claim(type:JwtRegisteredClaimNames.Jti, value:Guid.NewGuid().ToString()),
-            new Claim(type:JwtRegisteredClaimNames.Iat, value:DateTime.Now.ToUniversalTime().ToString())
-        };
-
-        var token = new JwtSecurityToken(
-                issuer: "https://localhost:5001",
-                audience: "https://localhost:5001",
-                expires: DateTime.Now.AddMinutes(5),
-                claims: new List<Claim>(),
-                signingCredentials: credentials
-            );
-
-        var encodedToken = new JwtSecurityTokenHandler().WriteToken(token);
-
-        return encodedToken;
+        return new string(Enumerable.Repeat(chars, length)
+          .Select(s => s[random.Next(s.Length)]).ToArray());
     }
 }
