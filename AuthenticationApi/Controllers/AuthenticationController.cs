@@ -1,14 +1,15 @@
 ﻿using AuthenticationServices.Models;
 using AuthenticationServices.Models.DTOs;
+using AuthenticationServices.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthenticationApi.Controllers;
 
 public class AuthenticationController : ControllerBase
 {
-    private readonly AuthenticationServices.Services.Interfaces.IAuthenticationService _authenticationService;
+    private readonly IAuthenticationService _authenticationService;
 
-    public AuthenticationController(AuthenticationServices.Services.Interfaces.IAuthenticationService authenticationService)
+    public AuthenticationController(IAuthenticationService authenticationService)
     {
         _authenticationService = authenticationService;
     }
