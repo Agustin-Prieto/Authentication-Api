@@ -1,7 +1,5 @@
 ﻿using AuthenticationServices.Models;
 using AuthenticationServices.Models.DTOs;
-using AuthenticationServices.Services.Interfaces;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthenticationApi.Controllers;
@@ -44,6 +42,41 @@ public class AuthenticationController : ControllerBase
 
         var response = await _authenticationService.Login(request);
 
+        return Ok(response);
+    }
+
+    [HttpPost]
+    [Route(template: "api/v1/refreshToken")]
+    public async Task<IActionResult> RefreshToken([FromBody] TokenRequest tokenRequest)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new AuthResult()
+            {
+                Errors = ModelState.Values.SelectMany(x => x.Errors.Select(xx => xx.ErrorMessage)).ToList(),
+                Result = false
+            });
+        }
+        
+        var response = await _authenticationService.RefreshToken(tokenRequest);
+
+        if(response == null)
+        {
+            return BadRequest(new AuthResult()
+            {
+                Errors = new List<string>()
+                {
+                    "Invalid Tokens"
+                },
+                Result = false
+            });
+        }
+
+        if (response.Errors != null)
+        {
+            return BadRequest(response);
+        }
+        
         return Ok(response);
     }
 }

@@ -11,23 +11,28 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 
-var server = builder.Configuration["DatabaseServer"];
-var port = builder.Configuration["DatabasePort"];
-var user = builder.Configuration["DatabaseUser"];
-var password = builder.Configuration["DatabasePassword"];
-var database = builder.Configuration["DatabaseName"];
-var connectionString = $"Server={server},{port};Initial Catalog={database};User ID={user};Password={password}";
+if (builder.Environment.IsEnvironment("Development"))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+}
+else
+{
+    var server = builder.Configuration["DatabaseServer"];
+    var port = builder.Configuration["DatabasePort"];
+    var user = builder.Configuration["DatabaseUser"];
+    var password = builder.Configuration["DatabasePassword"];
+    var database = builder.Configuration["DatabaseName"];
+    var connectionString = $"Server={server},{port};Initial Catalog={database};User ID={user};Password={password}";
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(connectionString));
+}
 
 builder.Services.AddIdentityCore<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = false)
     .AddEntityFrameworkStores<AppDbContext>();
@@ -63,13 +68,14 @@ builder.Services.AddSingleton(validationParams);
 
 var app = builder.Build();
 
-DatabaseManagementService.MigrationInitialization(app);
-
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+else
+{ 
+    DatabaseManagementService.MigrationInitialization(app);
 }
 
 app.UseHttpsRedirection();

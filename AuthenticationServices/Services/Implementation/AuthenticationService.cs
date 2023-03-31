@@ -3,6 +3,7 @@ using AuthenticationServices.Models;
 using AuthenticationServices.Models.DTOs;
 using AuthenticationServices.Services.Interfaces;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -111,6 +112,128 @@ public class AuthenticationService : IAuthenticationService
         return JwtToken;
     }
 
+    public async Task<AuthResult> RefreshToken(TokenRequest tokenRequest)
+    {
+        var jwtTokenHandler = new JwtSecurityTokenHandler();
+        try
+        {
+            _tokenValidationParameters.ValidateLifetime = false;
+            var tokenInVerificaion = jwtTokenHandler.ValidateToken(tokenRequest.Token, _tokenValidationParameters, out var validatedToken);
+
+            if (validatedToken is JwtSecurityToken jwtSecurityToken)
+            {
+                bool result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
+
+                if (result == null) return null;
+            }
+
+            var utcExpiryDate = long.Parse(tokenInVerificaion.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
+            var expiryDate = UnixTimeStampToDateTime(utcExpiryDate);
+
+            if (expiryDate > DateTime.Now.ToUniversalTime())
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Expired Token"
+                    }
+                };
+            }
+
+            var storedToken = await _context.RefreshTokens.FirstOrDefaultAsync(x => x.Token == tokenRequest.RefreshToken);
+
+            if (storedToken == null)
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Invalid tokens"
+                    }
+                };
+            }
+
+            if (storedToken.IsUsed)
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Invalid tokens: Token is used"
+                    }
+                };
+            }
+
+            if (storedToken.IsRevoke)
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Invalid tokens: Token is revoked"
+                    }
+                };
+            }
+
+            var jti = tokenInVerificaion.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+
+            if (storedToken.JwtId != jti)
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Invalid tokens"
+                    }
+                };
+            }
+
+            if (storedToken.ExpiryDates < DateTime.UtcNow)
+            {
+                return new AuthResult()
+                {
+                    Result = false,
+                    Errors = new List<string>()
+                    {
+                        "Expired Tokens"
+                    }
+                };
+            }
+
+            storedToken.IsUsed = true;
+
+            _context.RefreshTokens.Update(storedToken);
+            await _context.SaveChangesAsync();
+
+            var dbUser = await _userManager.FindByIdAsync(storedToken.UserId);
+
+            return await GenerateJwtToken(dbUser);
+        }
+        catch (Exception ex)
+        {
+            return new AuthResult()
+            {
+                Result = false,
+                Errors = new List<string>()
+                {
+                    "Server Error"
+                }
+            };
+        }
+    }
+
+    private DateTime UnixTimeStampToDateTime(long utcExpiryDate)
+    {
+        var dateTime = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+        return dateTime.AddSeconds(utcExpiryDate).ToUniversalTime();
+    }
+
     private async Task<AuthResult> GenerateJwtToken(IdentityUser user)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
@@ -121,13 +244,16 @@ public class AuthenticationService : IAuthenticationService
             Subject = new ClaimsIdentity(new Claim[]
             {
                 new Claim(type:"Id", value:user.Id),
-                new Claim(type:JwtRegisteredClaimNames.Sub, value:user.Email),
+                new Claim(type:JwtRegisteredClaimNames.Sub, "Login"),
                 new Claim(type:JwtRegisteredClaimNames.Email, value:user.Email),
-                new Claim(type:JwtRegisteredClaimNames.Jti, value:Guid.NewGuid().ToString()),
-                new Claim(type:JwtRegisteredClaimNames.Iat, value:DateTime.Now.ToUniversalTime().ToString())
+                new Claim(type:JwtRegisteredClaimNames.Jti, user.Id),
+                new Claim(type:JwtRegisteredClaimNames.Iat, value:DateTime.Now.ToUniversalTime().ToString()),
+                new Claim(type:JwtRegisteredClaimNames.Iss, _configuration.GetSection("JwtConfig:Issuer").Value),
+                new Claim(type:JwtRegisteredClaimNames.Aud, _configuration.GetSection("JwtConfig:Audience").Value),
+                new Claim(type:JwtRegisteredClaimNames.Exp, _configuration.GetSection("JwtConfig:ExpiryInMinutes").Value),
             }),
-
-            Expires = DateTime.UtcNow.Add(TimeSpan.Parse(_configuration.GetSection("JwtConfig:ExpiryInMinutes").Value)),
+            
+            Expires = DateTime.UtcNow.AddMinutes(Double.Parse(_configuration.GetSection("JwtConfig:ExpiryInMinutes").Value)).ToUniversalTime(),
 
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256)
         };

@@ -12,4 +12,5 @@ public interface IAuthenticationService
 {
     Task<AuthResult> Register(RegisterRequestDto request);
     Task<AuthResult> Login(LoginRequestDto request);
+    Task<AuthResult> RefreshToken(TokenRequest tokenRequest);
 }
