@@ -29,16 +29,24 @@ public class AuthenticationService : IAuthenticationService
     
     public async Task<AuthResult> Register(RegisterRequestDto request)
     {
-        var existingUser = await _userManager.FindByEmailAsync(request.Email);
-        if (existingUser != null)
+        try
         {
-            return new AuthResult()
+            var existingUser = await _userManager.FindByEmailAsync(request.Email);
+            if (existingUser != null)
             {
-                Errors = new List<string>() { "User with this email already exists" },
-                Result = false
-            };
+                return new AuthResult()
+                {
+                    Errors = new List<string>() { "User with this email already exists" },
+                    Result = false
+                };
+            }
         }
+        catch (Exception ex)
+        {
 
+            throw new InvalidOperationException("Database error: ", ex);
+        }
+        
         var newUser = new IdentityUser()
         {
             Email = request.Email,
@@ -67,13 +75,11 @@ public class AuthenticationService : IAuthenticationService
         }
         catch (ArgumentException ex)
         {
-            Console.WriteLine($"Se ha producido un error al crear el usuario: {ex.Message}");
-            throw new ArgumentException("Se ha producido un error al crear el usuario", ex);
+            throw new ArgumentException("Se ha producido un error al crear el usuario, error: ", ex);
         }
         catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"Se ha producido un error al crear el usuario: {ex.Message}");
-            throw new InvalidOperationException("Se ha producido un error al crear el usuario", ex);
+            throw new InvalidOperationException("Se ha producido un error al crear el usuario, error: ", ex);
         }
         catch (AggregateException ex)
         {
@@ -83,33 +89,38 @@ public class AuthenticationService : IAuthenticationService
 
     public async Task<AuthResult> Login(LoginRequestDto request)
     {
-        // validar que si existe usuario
-        var existingUser = await _userManager.FindByEmailAsync(request.Email);
-
-        if (existingUser == null)
+        try
         {
-            return new AuthResult()
+            var existingUser = await _userManager.FindByEmailAsync(request.Email);
+
+            if (existingUser == null)
             {
-                Errors = new List<string>() { "User with this email does not exists" },
-                Result = false
-            };
+                return new AuthResult()
+                {
+                    Errors = new List<string>() { "User with this email does not exists" },
+                    Result = false
+                };
+            }
+        
+            var isCorrect = await _userManager.CheckPasswordAsync(existingUser, request.Password);
+
+            if (!isCorrect)
+            {
+                return new AuthResult()
+                {
+                    Errors = new List<string>() { "User or password is incorrect" },
+                    Result = false
+                };
+            }
+            
+            var JwtToken = await GenerateJwtToken(existingUser);
+            
+            return JwtToken;
         }
-
-        // validar que la contraseña es correcta
-        var isCorrect = await _userManager.CheckPasswordAsync(existingUser, request.Password);
-
-        if (!isCorrect)
+        catch (Exception ex)
         {
-            return new AuthResult()
-            {
-                Errors = new List<string>() { "User or password is incorrect" },
-                Result = false
-            };
+            throw new InvalidOperationException("Database error: ", ex);
         }
-
-        var JwtToken = await GenerateJwtToken(existingUser);
-
-        return JwtToken;
     }
 
     public async Task<AuthResult> RefreshToken(TokenRequest tokenRequest)
@@ -117,17 +128,16 @@ public class AuthenticationService : IAuthenticationService
         var jwtTokenHandler = new JwtSecurityTokenHandler();
         try
         {
-            _tokenValidationParameters.ValidateLifetime = false;
-            var tokenInVerificaion = jwtTokenHandler.ValidateToken(tokenRequest.Token, _tokenValidationParameters, out var validatedToken);
+            var tokenInVerification = jwtTokenHandler.ValidateToken(tokenRequest.Token, _tokenValidationParameters, out var validatedToken);
 
             if (validatedToken is JwtSecurityToken jwtSecurityToken)
             {
-                bool result = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
+                bool correctAlgotithm = jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase);
 
-                if (result == null) return null;
+                if (!correctAlgotithm) return null;
             }
 
-            var utcExpiryDate = long.Parse(tokenInVerificaion.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
+            var utcExpiryDate = long.Parse(tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Exp).Value);
             var expiryDate = UnixTimeStampToDateTime(utcExpiryDate);
 
             if (expiryDate > DateTime.Now.ToUniversalTime())
@@ -180,7 +190,7 @@ public class AuthenticationService : IAuthenticationService
                 };
             }
 
-            var jti = tokenInVerificaion.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
+            var jti = tokenInVerification.Claims.FirstOrDefault(x => x.Type == JwtRegisteredClaimNames.Jti).Value;
 
             if (storedToken.JwtId != jti)
             {

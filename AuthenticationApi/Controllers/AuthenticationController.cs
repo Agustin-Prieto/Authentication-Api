@@ -28,6 +28,11 @@ public class AuthenticationController : ControllerBase
 
         var response = await _authenticationService.Register(request);
 
+        if (response.Errors != null && response.Errors.Any())  
+        {
+            return BadRequest(response);
+        }
+
         return Ok(response);
     }
 
@@ -37,10 +42,18 @@ public class AuthenticationController : ControllerBase
     {
         if (!ModelState.IsValid)
         {
-            return BadRequest(ModelState);
+            return BadRequest(new AuthResult()
+            {
+                Errors = ModelState.Values.SelectMany(x => x.Errors.Select(xx => xx.ErrorMessage)).ToList()
+            });
         }
 
         var response = await _authenticationService.Login(request);
+
+        if (response.Errors != null && response.Errors.Any())
+        {
+            return BadRequest(response);
+        }
 
         return Ok(response);
     }

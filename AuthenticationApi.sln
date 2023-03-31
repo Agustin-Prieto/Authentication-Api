@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CD", "CD", "{435B04D9-56CA-
 		Dockerfile = Dockerfile
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthenticationUnitTests", "AuthenticationUnitTests\AuthenticationUnitTests.csproj", "{36FFD757-F89A-4CE7-A31C-304C3625654C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -35,6 +37,10 @@ Global
 		{39CED2CB-B90A-4117-9BB7-662B484FA03A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{39CED2CB-B90A-4117-9BB7-662B484FA03A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{39CED2CB-B90A-4117-9BB7-662B484FA03A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36FFD757-F89A-4CE7-A31C-304C3625654C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36FFD757-F89A-4CE7-A31C-304C3625654C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36FFD757-F89A-4CE7-A31C-304C3625654C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36FFD757-F89A-4CE7-A31C-304C3625654C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
